@@ -2942,7 +2942,7 @@ function resolveElements(elementOrSelector, scope, selectorCache) {
     return [elementOrSelector];
   } else if (typeof elementOrSelector === "string") {
     let root = document;
-    const elements = root.querySelectorAll(elementOrSelector);
+    const elements = selectorCache?.[elementOrSelector] ?? root.querySelectorAll(elementOrSelector);
     return elements ? Array.from(elements) : [];
   }
   return Array.from(elementOrSelector).filter((element) => element != null);
@@ -3276,6 +3276,77 @@ function transform(...args) {
   const options = args[3 + argOffset];
   const interpolator = interpolate(inputRange, outputRange, options);
   return useImmediate ? interpolator(inputValue) : interpolator;
+}
+function attachFollow(value, source, options = {}) {
+  const initialValue = value.get();
+  let activeAnimation = null;
+  let latestValue = initialValue;
+  let latestSetter;
+  const unit = typeof initialValue === "string" ? initialValue.replace(/[\d.-]/g, "") : void 0;
+  const stopAnimation = () => {
+    if (activeAnimation) {
+      activeAnimation.stop();
+      activeAnimation = null;
+    }
+    value.animation = void 0;
+  };
+  const startAnimation = () => {
+    const currentValue = asNumber$1(value.get());
+    const targetValue = asNumber$1(latestValue);
+    if (currentValue === targetValue) {
+      stopAnimation();
+      return;
+    }
+    const velocity = activeAnimation ? activeAnimation.getGeneratorVelocity() : value.getVelocity();
+    stopAnimation();
+    activeAnimation = new JSAnimation({
+      keyframes: [currentValue, targetValue],
+      velocity,
+      // Default to spring if no type specified (matches useSpring behavior)
+      type: "spring",
+      restDelta: 1e-3,
+      restSpeed: 0.01,
+      ...options,
+      onUpdate: latestSetter
+    });
+  };
+  const scheduleAnimation = () => {
+    startAnimation();
+    value.animation = activeAnimation ?? void 0;
+    value["events"].animationStart?.notify();
+    activeAnimation?.then(() => {
+      value.animation = void 0;
+      value["events"].animationComplete?.notify();
+    });
+  };
+  value.attach((v, set) => {
+    latestValue = v;
+    latestSetter = (latest) => set(parseValue(latest, unit));
+    frame.postRender(scheduleAnimation);
+  }, stopAnimation);
+  if (isMotionValue(source)) {
+    let skipNextAnimation = options.skipInitialAnimation === true;
+    const removeSourceOnChange = source.on("change", (v) => {
+      if (skipNextAnimation) {
+        skipNextAnimation = false;
+        value.jump(parseValue(v, unit), false);
+      } else {
+        value.set(parseValue(v, unit));
+      }
+    });
+    const removeValueOnDestroy = value.on("destroy", removeSourceOnChange);
+    return () => {
+      removeSourceOnChange();
+      removeValueOnDestroy();
+    };
+  }
+  return stopAnimation;
+}
+function parseValue(v, unit) {
+  return unit ? v + unit : v;
+}
+function asNumber$1(v) {
+  return typeof v === "number" ? v : parseFloat(v);
 }
 const valueTypes = [...dimensionValueTypes, color, complex];
 const findValueType = (v) => valueTypes.find(testValueType(v));
@@ -5930,57 +6001,58 @@ const HTMLProjectionNode = createProjectionNode({
   checkIsScrollRoot: (instance) => Boolean(window.getComputedStyle(instance).position === "fixed")
 });
 export {
-  eachAxis as A,
-  measurePageBox as B,
-  convertBoxToBoundingBox as C,
-  convertBoundingBoxToBox as D,
-  addValueToWillChange as E,
+  attachFollow as $,
+  createBox as A,
+  eachAxis as B,
+  measurePageBox as C,
+  convertBoxToBoundingBox as D,
+  convertBoundingBoxToBox as E,
   Feature as F,
-  animateMotionValue as G,
+  addValueToWillChange as G,
   HTMLVisualElement as H,
-  setDragLock as I,
-  resize as J,
-  percent as K,
-  isElementTextInput as L,
-  microtask as M,
-  globalProjectionState as N,
-  HTMLProjectionNode as O,
-  hover as P,
-  press as Q,
-  supportsViewTimeline as R,
+  animateMotionValue as I,
+  setDragLock as J,
+  resize as K,
+  percent as L,
+  isElementTextInput as M,
+  microtask as N,
+  globalProjectionState as O,
+  HTMLProjectionNode as P,
+  hover as Q,
+  press as R,
   SVGVisualElement as S,
-  supportsScrollTimeline as T,
-  isHTMLElement as U,
+  supportsViewTimeline as T,
+  supportsScrollTimeline as U,
   interpolate as V,
   defaultOffset as W,
   observeTimeline as X,
   motionValue as Y,
   collectMotionValues as Z,
   transform as _,
-  isControllingVariants as a,
-  isVariantLabel as b,
-  isForcedMotionValue as c,
-  buildHTMLStyles as d,
-  buildSVGAttrs as e,
-  isSVGTag as f,
+  isMotionValue as a,
+  isControllingVariants as b,
+  isVariantLabel as c,
+  isForcedMotionValue as d,
+  buildHTMLStyles as e,
+  buildSVGAttrs as f,
   getFeatureDefinitions as g,
-  isVariantNode as h,
-  isMotionValue as i,
-  isAnimationControls as j,
-  resolveVariantFromProps as k,
-  scrapeMotionValuesFromProps$1 as l,
-  scrapeMotionValuesFromProps as m,
-  createAnimationState as n,
+  isSVGTag as h,
+  isHTMLElement as i,
+  isVariantNode as j,
+  isAnimationControls as k,
+  resolveVariantFromProps as l,
+  scrapeMotionValuesFromProps$1 as m,
+  scrapeMotionValuesFromProps as n,
   optimizedAppearDataAttribute as o,
-  resolveVariant as p,
-  isPrimaryPointer as q,
+  createAnimationState as p,
+  resolveVariant as q,
   resolveMotionValue as r,
   setFeatureDefinitions as s,
-  addDomEvent as t,
-  frameData as u,
-  frame as v,
-  cancelFrame as w,
-  mixNumber$1 as x,
-  calcLength as y,
-  createBox as z
+  isPrimaryPointer as t,
+  addDomEvent as u,
+  frameData as v,
+  frame as w,
+  cancelFrame as x,
+  mixNumber$1 as y,
+  calcLength as z
 };
