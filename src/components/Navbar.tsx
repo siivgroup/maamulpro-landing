@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, useScroll, useSpring } from "framer-motion";
-import maamulProLogo from "../images/MaamulPro.png";
+import maamulProLogo from "../images/MaamulPro.svg";
 import { ThemeToggle } from "./ThemeToggle";
 
 const links = [

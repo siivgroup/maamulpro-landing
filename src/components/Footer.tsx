@@ -1,4 +1,4 @@
-import maamulProLogo from "../images/MaamulPro.png";
+import maamulProLogo from "../images/MaamulPro.svg";
 import siivGroupLogo from "../images/siiv-group.png";
 
 export function Footer() {
